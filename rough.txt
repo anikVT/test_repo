@@ -1,0 +1,85 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def plot_rotation_matrix(R, ax, origin=np.array([0, 0, 0]), length=1.0, label=None):
+    """
+    Visualizes a single rotation matrix as basis vectors in 3D space.
+    
+    Parameters:
+    R (np.array): 3x3 rotation matrix.
+    ax (Axes3D): 3D axis to plot on.
+    origin (np.array): Origin of the basis vectors.
+    length (float): Length of the basis vectors.
+    label (str): Label for the basis vectors.
+    """
+    colors = ['r', 'g', 'b']
+    labels = ['x', 'y', 'z'] if label is None else label
+    
+    for i in range(3):
+        ax.quiver(*origin, *R[:, i]*length, color=colors[i], label=f'{labels[i]}-axis')
+    
+def plot_multiple_rotation_matrices(rotation_matrices, position_diff, axis='x',figsize=(10,10),lims = [-10,10]):
+    """
+    Visualizes multiple rotation matrices with fixed position differences.
+    
+    Parameters:
+    rotation_matrices (list of np.array): List of 3x3 rotation matrices.
+    position_diff (float): Fixed positional offset.
+    axis (str): Axis along which the offset is applied ('x', 'y', or 'z').
+    """
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlim(lims)
+    ax.set_ylim(lims)
+    ax.set_zlim(lims)
+
+   
+    
+    offset = np.array([0, 0, 0])
+    for i, R in enumerate(rotation_matrices):
+        plot_rotation_matrix(R, ax, origin=offset, length=1.0, label=f'Matrix {i+1}')
+        if axis == 'x':
+            offset += np.array([position_diff, 0, 0])
+        elif axis == 'y':
+            offset += np.array([0, position_diff, 0])
+        elif axis == 'z':
+            offset += np.array([0, 0, position_diff])
+
+    ax.grid(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_zticklabels([])
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+    ax.set_zlabel('')
+
+
+    ax.set_box_aspect([1,1,1])  # Set the aspect ratio of the box to be equal
+    ax.set_facecolor((1, 1, 1, 1))  # Make the background transparent
+    ax.grid(False)  # Hide the grid
+
+    # Hide the panes
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+
+    # Hide the box edges
+    ax.xaxis.pane.set_edgecolor((1, 1, 1, 1))
+    ax.yaxis.pane.set_edgecolor((1, 1, 1, 1))
+    ax.zaxis.pane.set_edgecolor((1, 1, 1, 1))
+
+    ax.xaxis._axinfo['grid'].update({'linewidth': 0})
+    ax.yaxis._axinfo['grid'].update({'linewidth': 0})
+    ax.zaxis._axinfo['grid'].update({'linewidth': 0})
+
+
+
+
+        
+    #ax.legend()
+    plt.show()
+
