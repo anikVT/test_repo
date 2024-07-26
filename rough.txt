@@ -123,3 +123,43 @@ try:
 except KeyboardInterrupt:
     print("Real-time processing stopped.")
 
+
+
+
+
+
+
+--------------------------------------------------------------------------------------
+import numpy as np
+from ahrs.filters import Madgwick
+import time
+
+# Example data - Replace these with your actual data
+gyro_data = np.random.randn(1000, 3)  # Replace with actual gyroscope data (Nx3 array)
+accel_data = np.random.randn(1000, 3)  # Replace with actual accelerometer data (Nx3 array)
+frequency = 200  # Sampling frequency in Hz
+
+# Initialize the Madgwick filter
+madgwick = Madgwick(frequency=frequency)
+
+# Initialize an array to store the orientation estimates
+orientations = np.zeros((len(gyro_data), 4))  # Nx4 array for quaternions
+
+# Simulate real-time frame-by-frame processing
+for i in range(len(gyro_data)):
+    gyr = gyro_data[i]
+    acc = accel_data[i]
+    
+    # Update the Madgwick filter with the new sensor data
+    madgwick.updateIMU(gyr=gyr, acc=acc)
+    
+    # Store the current orientation as a quaternion
+    orientations[i] = madgwick.Q
+    
+    # Simulate real-time delay
+    time.sleep(1.0 / frequency)
+
+# Print the estimated orientations
+print("Estimated orientations (quaternions):")
+print(orientations)
+
