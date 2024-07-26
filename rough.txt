@@ -83,3 +83,43 @@ def plot_multiple_rotation_matrices(rotation_matrices, position_diff, axis='x',f
     #ax.legend()
     plt.show()
 
+
+
+---------------------------------------------------------------------------------------------------------------------
+
+
+import time
+import numpy as np
+from ahrs.filters import Madgwick
+
+# Initialize the Madgwick filter
+frequency = 200  # Sampling frequency in Hz
+madgwick = Madgwick(frequency=frequency)
+
+# Dummy data generation function (replace with your sensor data acquisition method)
+def get_sensor_data():
+    # Replace this with actual sensor data acquisition
+    gyro = np.random.randn(3)  # Replace with actual gyroscope data
+    accel = np.random.randn(3)  # Replace with actual accelerometer data
+    return gyro, accel
+
+try:
+    while True:
+        # Get the latest sensor data
+        gyr, acc = get_sensor_data()
+
+        # Update the Madgwick filter with the new sensor data
+        madgwick.updateIMU(gyr=gyr, acc=acc)
+
+        # Get the current orientation as a quaternion
+        orientation = madgwick.Q
+
+        # Print or log the orientation
+        print("Current orientation (quaternion):", orientation)
+
+        # Sleep for the sampling interval duration
+        time.sleep(1.0 / frequency)
+
+except KeyboardInterrupt:
+    print("Real-time processing stopped.")
+
