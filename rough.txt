@@ -163,3 +163,48 @@ for i in range(len(gyro_data)):
 print("Estimated orientations (quaternions):")
 print(orientations)
 
+
+
+
+--------------------------------
+
+
+import h5py
+import numpy as np
+
+def save_to_h5(filename, data):
+    """
+    Saves a Python data structure to an HDF5 file.
+
+    Parameters:
+    - filename: str, the name of the HDF5 file to save the data.
+    - data: the data to save, which can be a dictionary, list, NumPy array, or basic data type.
+    """
+    with h5py.File(filename, 'w') as hf:
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, np.ndarray):
+                    hf.create_dataset(key, data=value)
+                else:
+                    hf.attrs[key] = value
+        elif isinstance(data, list):
+            for i, value in enumerate(data):
+                if isinstance(value, np.ndarray):
+                    hf.create_dataset(str(i), data=value)
+                else:
+                    hf.attrs[str(i)] = value
+        elif isinstance(data, np.ndarray):
+            hf.create_dataset('data', data=data)
+        else:
+            hf.attrs['value'] = data
+
+# Example usage
+data_dict = {
+    'array': np.array([1, 2, 3]),
+    'scalar': 42
+}
+
+data_list = [np.array([4, 5, 6]), 'string', 3.14]
+
+save_to_h5('data_dict.h5', data_dict)
+save_to_h5('data_list.h5', data_list)
