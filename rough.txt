@@ -208,3 +208,55 @@ data_list = [np.array([4, 5, 6]), 'string', 3.14]
 
 save_to_h5('data_dict.h5', data_dict)
 save_to_h5('data_list.h5', data_list)
+
+
+
+-------------------------------
+
+
+def save_nested_dict_to_h5(h5file, path, data):
+    """
+    Recursively saves a nested dictionary to an HDF5 file.
+
+    Parameters:
+    - h5file: An open h5py.File object where the data will be stored.
+    - path: A string representing the current path in the HDF5 file.
+    - data: The data to save, which can be a dictionary, list, NumPy array, or basic data type.
+    """
+    if isinstance(data, dict):
+        for key, value in data.items():
+            current_path = f"{path}/{key}"
+            save_nested_dict_to_h5(h5file, current_path, value)
+    elif isinstance(data, np.ndarray):
+        h5file.create_dataset(path, data=data)
+    else:
+        # Store basic data types as attributes (you can modify this as needed)
+        h5file.attrs[path] = data
+
+def save_to_h5(filename, data):
+    """
+    Saves a Python nested dictionary to an HDF5 file.
+
+    Parameters:
+    - filename: str, the name of the HDF5 file to save the data.
+    - data: the data to save, which can be a nested dictionary containing NumPy arrays.
+    """
+    with h5py.File(filename, 'w') as hf:
+        save_nested_dict_to_h5(hf, '', data)
+
+# Example usage
+data = {
+    'imu1': {
+        'acce': np.array([1, 2, 3]),
+        'mag': np.array([4, 5, 6]),
+        'gyro': np.array([7, 8, 9])
+    },
+    'imu2': {
+        'acce': np.array([10, 11, 12]),
+        'mag': np.array([13, 14, 15]),
+        'gyro': np.array([16, 17, 18])
+    }
+    # More nested data...
+}
+
+save_to_h5('nested_data.h5', data)
