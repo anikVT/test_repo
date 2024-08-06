@@ -260,3 +260,80 @@ data = {
 }
 
 save_to_h5('nested_data.h5', data)
+
+
+------------------------------------------------------
+CNN-LSTM
+------------------------------------------------------
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# Define the CNN-LSTM model
+class CNN_LSTM(nn.Module):
+    def __init__(self, input_size, cnn_output_size, lstm_hidden_size, num_classes):
+        super(CNN_LSTM, self).__init__()
+        self.cnn = nn.Sequential(
+            nn.Conv1d(in_channels=input_size, out_channels=128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2),
+            nn.Dropout(0.3),
+            nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2),
+            nn.Dropout(0.3),
+            nn.Conv1d(in_channels=256, out_channels=512, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2),
+            nn.Dropout(0.3)
+        )
+        self.lstm = nn.LSTM(input_size=cnn_output_size, hidden_size=lstm_hidden_size, num_layers=2, batch_first=True)
+        self.fc = nn.Linear(lstm_hidden_size, num_classes)
+
+    def forward(self, x):
+        # x shape: (batch_size, time_steps, input_size)
+        batch_size, time_steps, _ = x.size()
+        
+        # Reshape for CNN: (batch_size, input_size, time_steps)
+        x = x.permute(0, 2, 1)
+        x = self.cnn(x)
+        
+        # Reshape for LSTM: (batch_size, time_steps, cnn_output_size)
+        x = x.permute(0, 2, 1)
+        lstm_out, _ = self.lstm(x)
+        
+        # Use the last output of the LSTM for classification
+        lstm_out = lstm_out[:, -1, :]
+        out = self.fc(lstm_out)
+        return out
+
+# Define hyperparameters
+input_size = 72  # 12 IMUs * 6 features (3-axis accelerometer + 3-axis gyroscope)
+cnn_output_size = 512  # Output size from CNN
+lstm_hidden_size = 256  # Hidden size of LSTM
+num_classes = 22  # Number of joint angles
+
+# Instantiate the model, loss function, and optimizer
+model = CNN_LSTM(input_size, cnn_output_size, lstm_hidden_size, num_classes)
+criterion = nn.MSELoss()  # Assuming regression task for joint angles
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Example training loop (pseudo code)
+for epoch in range(num_epochs):
+    for data, labels in data_loader:  # Assuming data_loader provides batches of data
+        # Move tensors to the configured device
+        data = data.to(device)
+        labels = labels.to(device)
+        
+        # Forward pass
+        outputs = model(data)
+        loss = criterion(outputs, labels)
+        
+        # Backward pass and optimization
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
+
