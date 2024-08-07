@@ -337,3 +337,99 @@ for epoch in range(num_epochs):
         
         print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
 
+------------------------------------------------------------------------------------------------------
+
+import numpy as np
+
+def normalize(v):
+    """Normalize a vector."""
+    norm = np.linalg.norm(v)
+    if norm == 0:
+        return v
+    return v / norm
+
+def quaternion_from_gyro(q, gyro, dt):
+    """Update quaternion using gyroscope data."""
+    gyro_quat = np.array([0, gyro[0], gyro[1], gyro[2]])
+    q_dot = 0.5 * quaternion_multiply(q, gyro_quat)
+    q_new = q + q_dot * dt
+    return normalize(q_new)
+
+def quaternion_from_acc(acc):
+    """Get quaternion from accelerometer data assuming down is [0, 0, 1]."""
+    acc = normalize(acc)
+    ax, ay, az = acc
+    if az >= 0:
+        qw = np.sqrt(1 + az)
+        qx = -ay / np.sqrt(2 * (1 + az))
+        qy = ax / np.sqrt(2 * (1 + az))
+        qz = 0
+    else:
+        qw = ay / np.sqrt(2 * (1 - az))
+        qx = np.sqrt(1 - az)
+        qy = 0
+        qz = -ax / np.sqrt(2 * (1 - az))
+    return normalize(np.array([qw, qx, qy, qz]))
+
+def quaternion_multiply(q1, q2):
+    """Quaternion multiplication."""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return np.array([
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2
+    ])
+
+def complementary_filter(q, gyro, acc, alpha, dt):
+    """Apply complementary filter to fuse gyroscope and accelerometer data."""
+    q_gyro = quaternion_from_gyro(q, gyro, dt)
+    q_acc = quaternion_from_acc(acc)
+    
+    # Slerp (Spherical Linear Interpolation) between the two quaternions
+    dot_product = np.dot(q_gyro, q_acc)
+    if dot_product < 0.0:
+        q_acc = -q_acc
+        dot_product = -dot_product
+
+    # Clamp the dot product to avoid numerical errors
+    dot_product = min(max(dot_product, -1.0), 1.0)
+    theta = np.arccos(dot_product)
+    sin_theta = np.sin(theta)
+
+    if sin_theta < 1e-6:
+        result = (1 - alpha) * q_gyro + alpha * q_acc
+    else:
+        ratio_a = np.sin((1 - alpha) * theta) / sin_theta
+        ratio_b = np.sin(alpha * theta) / sin_theta
+        result = ratio_a * q_gyro + ratio_b * q_acc
+
+    return normalize(result)
+
+# Main function to process the data
+def process_sensor_data(accel_data, gyro_data, dt, alpha):
+    n = len(accel_data)
+    quaternions = np.zeros((n, 4))
+    q = np.array([1, 0, 0, 0])  # Initial quaternion (identity quaternion)
+
+    for i in range(n):
+        gyro = gyro_data[i]
+        acc = accel_data[i]
+        q = complementary_filter(q, gyro, acc, alpha, dt)
+        quaternions[i] = q
+
+    return quaternions
+
+# Example usage with dummy data
+n = 1000  # Number of frames
+dt = 0.01  # Time step in seconds
+alpha = 0.02  # Complementary filter coefficient
+
+# Simulated sensor data (replace with actual sensor readings)
+accel_data = np.random.randn(n, 3)  # Replace with actual accelerometer data
+gyro_data = np.random.randn(n, 3)  # Replace with actual gyroscope data
+
+# Get quaternion for each frame
+quaternions = process_sensor_data(accel_data, gyro_data, dt, alpha)
+print("Quaternions:", quaternions)
