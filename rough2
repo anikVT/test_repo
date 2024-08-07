@@ -1,0 +1,80 @@
+import numpy as np
+from ahrs.filters import Madgwick
+import time
+
+# Example data - Replace these with your actual data
+gyro_data = np.random.randn(1000, 3)  # Replace with actual gyroscope data (Nx3 array)
+accel_data = np.random.randn(1000, 3)  # Replace with actual accelerometer data (Nx3 array)
+frequency = 200  # Sampling frequency in Hz
+
+# Initialize the Madgwick filter
+madgwick = Madgwick(frequency=frequency)
+
+# Initialize an array to store the orientation estimates
+orientations = np.zeros((len(gyro_data), 4))  # Nx4 array for quaternions
+
+def normalize(v):
+    norm = np.linalg.norm(v)
+    if norm == 0:
+        return v
+    return v / norm
+
+# Function to ensure gravity vector aligns with the z-axis
+def align_gravity(quaternion):
+    # Create a gravity vector
+    gravity = np.array([0.0, 0.0, 1.0])
+    
+    # Convert quaternion to rotation matrix
+    q0, q1, q2, q3 = quaternion
+    rot_matrix = np.array([
+        [1 - 2*(q2**2 + q3**2), 2*(q1*q2 - q0*q3), 2*(q1*q3 + q0*q2)],
+        [2*(q1*q2 + q0*q3), 1 - 2*(q1**2 + q3**2), 2*(q2*q3 - q0*q1)],
+        [2*(q1*q3 - q0*q2), 2*(q2*q3 + q0*q1), 1 - 2*(q1**2 + q2**2)]
+    ])
+    
+    # Rotate gravity vector
+    estimated_gravity = np.dot(rot_matrix, gravity)
+    
+    # Compute correction quaternion
+    v = np.cross(estimated_gravity, gravity)
+    s = np.sqrt((1 + np.dot(estimated_gravity, gravity)) * 2)
+    correction_quaternion = np.hstack((s / 2, v / s))
+    correction_quaternion = normalize(correction_quaternion)
+    
+    # Apply correction
+    q_corrected = quaternion_multiply(correction_quaternion, quaternion)
+    return normalize(q_corrected)
+
+def quaternion_multiply(q1, q2):
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return np.array([
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2
+    ])
+
+# Simulate real-time frame-by-frame processing
+for i in range(len(gyro_data)):
+    gyr = gyro_data[i]
+    acc = normalize(accel_data[i])
+    
+    # Update the Madgwick filter with the new sensor data
+    madgwick.updateIMU(gyr=gyr, acc=acc)
+    
+    # Get the current orientation as a quaternion
+    quaternion = madgwick.Q
+    
+    # Correct the orientation to align gravity with the z-axis
+    corrected_quaternion = align_gravity(quaternion)
+    
+    # Store the corrected orientation
+    orientations[i] = corrected_quaternion
+    
+    # Simulate real-time delay
+    time.sleep(1.0 / frequency)
+
+# Print the estimated orientations
+print("Estimated orientations (quaternions):")
+print(orientations)
