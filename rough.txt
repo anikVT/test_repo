@@ -433,3 +433,72 @@ gyro_data = np.random.randn(n, 3)  # Replace with actual gyroscope data
 # Get quaternion for each frame
 quaternions = process_sensor_data(accel_data, gyro_data, dt, alpha)
 print("Quaternions:", quaternions)
+
+--------------------------------------------------------
+
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
+
+def animateHandPoses(hand_poses):
+    fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'scene'}]])
+    
+    # Setup initial frame
+    initial_pose = hand_poses[0]
+    sample_hand_model_1 = MomentumHandModel()
+    sample_hand_pose_1 = sample_hand_model_1.getCurrentNimbleHandPose()
+    sample_hand_pose_1.jointAngles = initial_pose[0:22]
+    sample_hand_pose_1.rootRotation = initial_pose[22:26]
+    sample_hand_pose_1.rootTranslation = initial_pose[26:29]
+    sample_hand_model_1.setHandPose(sample_hand_pose_1)
+    
+    mesh = plot_model.plot_mesh(sample_hand_model_1.meshState, showHoverText=True)
+    fig.add_trace(mesh)
+    
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(visible=False, showticklabels=False),
+            yaxis=dict(visible=False, showticklabels=False),
+            zaxis=dict(visible=False, showticklabels=False),
+        ),
+        width=800, height=600,
+        showlegend=False
+    )
+    
+    # Create frames for each hand pose
+    frames = []
+    for i, pose in enumerate(hand_poses):
+        sample_hand_model_1 = MomentumHandModel()
+        sample_hand_pose_1 = sample_hand_model_1.getCurrentNimbleHandPose()
+        sample_hand_pose_1.jointAngles = pose[0:22]
+        sample_hand_pose_1.rootRotation = pose[22:26]
+        sample_hand_pose_1.rootTranslation = pose[26:29]
+        sample_hand_model_1.setHandPose(sample_hand_pose_1)
+        
+        frames.append(go.Frame(
+            data=[plot_model.plot_mesh(sample_hand_model_1.meshState, showHoverText=True)],
+            name=f'frame_{i}'
+        ))
+    
+    fig.frames = frames
+    
+    # Add animation settings
+    fig.update_layout(
+        updatemenus=[{
+            'type': 'buttons',
+            'buttons': [{
+                'label': 'Play',
+                'method': 'animate',
+                'args': [None, {'frame': {'duration': 100, 'redraw': True}, 'fromcurrent': True}]
+            }, {
+                'label': 'Pause',
+                'method': 'animate',
+                'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]
+            }]
+        }]
+    )
+    
+    fig.show()
+
+# Example usage
+# hand_poses is a numpy array with shape (n, 29)
+# animateHandPoses(hand_poses)
