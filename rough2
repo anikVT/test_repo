@@ -82,127 +82,24 @@ print(orientations)
 
 -----------------------------------------------------------------------
 
-
-import numpy as np
-from scipy.linalg import svd
-
-# Function to convert a quaternion to a rotation matrix
-def quat2rotmat(quat):
-    w, x, y, z = quat
-    return np.array([
-        [1 - 2*y**2 - 2*z**2, 2*x*y - 2*z*w, 2*x*z + 2*y*w],
-        [2*x*y + 2*z*w, 1 - 2*x**2 - 2*z**2, 2*y*z - 2*x*w],
-        [2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x**2 - 2*y**2]
-    ])
-
-# Function to convert a rotation matrix to a quaternion
-def rotmat2quat(rotmat):
-    m = rotmat
-    t = np.trace(m)
-    if t > 0:
-        S = np.sqrt(t + 1.0) * 2
-        w = 0.25 * S
-        x = (m[2, 1] - m[1, 2]) / S
-        y = (m[0, 2] - m[2, 0]) / S
-        z = (m[1, 0] - m[0, 1]) / S
-    elif (m[0, 0] > m[1, 1]) and (m[0, 0] > m[2, 2]):
-        S = np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2]) * 2
-        w = (m[2, 1] - m[1, 2]) / S
-        x = 0.25 * S
-        y = (m[0, 1] + m[1, 0]) / S
-        z = (m[0, 2] + m[2, 0]) / S
-    elif m[1, 1] > m[2, 2]:
-        S = np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2]) * 2
-        w = (m[0, 2] - m[2, 0]) / S
-        x = (m[0, 1] + m[1, 0]) / S
-        y = 0.25 * S
-        z = (m[1, 2] + m[2, 1]) / S
-    else:
-        S = np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1]) * 2
-        w = (m[1, 0] - m[0, 1]) / S
-        x = (m[0, 2] + m[2, 0]) / S
-        y = (m[1, 2] + m[2, 1]) / S
-        z = 0.25 * S
-    return np.array([w, x, y, z])
-
-# Function to multiply two quaternions
-def quaternion_multiply(q1, q2):
-    w1, x1, y1, z1 = q1
-    w2, x2, y2, z2 = q2
-    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
-    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
-    y = w1*y2 - x1*z2 + y1*w2 + z1*x2
-    z = w1*z2 + x1*y2 - y1*x2 + z1*w2
-    return np.array([w, x, y, z])
-
-# Function to compute the conjugate of a quaternion
-def quaternion_conjugate(quat):
-    w, x, y, z = quat
-    return np.array([w, -x, -y, -z])
-
-# Function to compute the distance between two quaternions
-def quaternion_distance(q1, q2):
-    q1_conj = quaternion_conjugate(q1)
-    delta_q = quaternion_multiply(q1_conj, q2)
-    delta_q = delta_q / np.linalg.norm(delta_q)
-    angle = 2 * np.arccos(np.clip(delta_q[0], -1.0, 1.0))
-    return angle
-
-# Function to align quaternions
-def align_quaternions(setA, setB):
-    n = setA.shape[0]
+def find_optimal_rotation(Set_A, Set_B):
+    # Reshape the matrices into 2D matrices
+    A_reshaped = Set_A.reshape(-1, 3)
+    B_reshaped = Set_B.reshape(-1, 3)
     
-    # Convert quaternions to rotation matrices
-    rotA = np.array([quat2rotmat(q) for q in setA])
-    rotB = np.array([quat2rotmat(q) for q in setB])
+    # Compute the cross-covariance matrix
+    H = B_reshaped.T @ A_reshaped
     
-    # Compute the matrix K
-    K = np.zeros((3, 3))
-    for i in range(n):
-        K += np.dot(rotB[i].T, rotA[i])
+    # Perform SVD on the covariance matrix
+    U, S, Vt = np.linalg.svd(H)
     
-    # Perform SVD on K
-    U, S, Vt = svd(K)
-    R_opt = np.dot(U, Vt)
+    # Compute the optimal rotation matrix
+    R_opt = Vt.T @ U.T
     
-    # Ensure a proper rotation (det(R_opt) = 1)
+    # Ensure the rotation matrix is proper (det(R) = 1)
     if np.linalg.det(R_opt) < 0:
         Vt[2, :] *= -1
-        R_opt = np.dot(U, Vt)
+        R_opt = Vt.T @ U.T
     
-    # Convert the optimal rotation matrix to a quaternion
-    q_opt = rotmat2quat(R_opt)
-    
-    return q_opt
-
-# Generate a random quaternion set A
-def random_quaternion():
-    u1, u2, u3 = np.random.uniform(0, 1, 3)
-    q = np.array([
-        np.sqrt(1-u1) * np.sin(2*np.pi*u2),
-        np.sqrt(1-u1) * np.cos(2*np.pi*u2),
-        np.sqrt(u1) * np.sin(2*np.pi*u3),
-        np.sqrt(u1) * np.cos(2*np.pi*u3)
-    ])
-    return q / np.linalg.norm(q)
-
-# Number of quaternions
-n = 10
-setA = np.array([random_quaternion() for _ in range(n)])
-
-# Ground truth rotation quaternion
-q_gt = random_quaternion()
-
-# Apply the ground truth rotation to create set B
-setB = np.array([quaternion_multiply(q_gt, q) for q in setA])
-
-# Estimate the optimal quaternion
-q_opt = align_quaternions(setA, setB)
-
-# Compute the alignment error
-alignment_error = quaternion_distance(q_gt, q_opt)
-
-print("Ground Truth Quaternion (q_gt):", q_gt)
-print("Optimal Quaternion (q_opt):", q_opt)
-print("Alignment Error (in radians):", alignment_error)
+    return R_opt
 
