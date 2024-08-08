@@ -1,0 +1,145 @@
+import numpy as np
+from ahrs.filters import Madgwick
+import scipy.signal as signal
+import time
+
+# Example data - Replace these with your actual data acquisition system
+gyro_data = np.random.randn(1000, 3)  # Replace with actual gyroscope data (Nx3 array)
+accel_with_gravity = np.random.randn(1000, 3)  # Replace with actual accelerometer data with gravity (Nx3 array)
+mag_data = np.random.randn(1000, 3)  # Replace with actual magnetometer data (Nx3 array)
+frequency = 200  # Sampling frequency in Hz
+gain_imu = 0.033  # Initial filter gain for IMU implementation (default value)
+initial_orientation = np.array([1, 0, 0, 0])  # Initial orientation quaternion
+
+# Filter parameters
+cutoff_frequency = 5.0  # Cutoff frequency in Hz
+order = 4  # Filter order
+
+# Design the Butterworth filter for accelerometer and magnetometer
+b, a = signal.butter(order, cutoff_frequency / (0.5 * frequency), btype='low', analog=False)
+
+# Initialize the Madgwick filter with the custom parameters
+madgwick = Madgwick(frequency=frequency, gain=gain_imu, q0=initial_orientation)
+
+# Initialize an array to store the orientation estimates
+orientations = np.zeros((len(gyro_data), 4))  # Nx4 array for quaternions
+
+# Initialize variables for gyroscope bias estimation
+gyro_bias = np.zeros(3)
+gyro_bias_estimation_count = 0
+gyro_bias_threshold = 50  # Number of frames to average for bias estimation
+
+def normalize(v):
+    norm = np.linalg.norm(v)
+    if norm == 0:
+        return v
+    return v / norm
+
+# Function to ensure gravity vector aligns with the z-axis
+def align_gravity(quaternion, acc):
+    gravity = np.array([0.0, 0.0, 1.0])
+    q0, q1, q2, q3 = quaternion
+    rot_matrix = np.array([
+        [1 - 2*(q2**2 + q3**2), 2*(q1*q2 - q0*q3), 2*(q1*q3 + q0*q2)],
+        [2*(q1*q2 + q0*q3), 1 - 2*(q1**2 + q3**2), 2*(q2*q3 - q0*q1)],
+        [2*(q1*q3 - q0*q2), 2*(q2*q3 + q0*q1), 1 - 2*(q1**2 + q2**2)]
+    ])
+    estimated_gravity = np.dot(rot_matrix, gravity)
+    v = np.cross(estimated_gravity, acc)
+    s = np.sqrt((1 + np.dot(estimated_gravity, acc)) * 2)
+    correction_quaternion = np.hstack((s / 2, v / s))
+    correction_quaternion = normalize(correction_quaternion)
+    corrected_quaternion = quaternion_multiply(correction_quaternion, quaternion)
+    return normalize(corrected_quaternion)
+
+# Function to align magnetic north with the x-axis
+def align_mag(quaternion, mag):
+    mag = normalize(mag)
+    gravity = np.array([0.0, 0.0, 1.0])
+    q0, q1, q2, q3 = quaternion
+    rot_matrix = np.array([
+        [1 - 2*(q2**2 + q3**2), 2*(q1*q2 - q0*q3), 2*(q1*q3 + q0*q2)],
+        [2*(q1*q2 + q0*q3), 1 - 2*(q1**2 + q3**2), 2*(q2*q3 - q0*q1)],
+        [2*(q1*q3 - q0*q2), 2*(q2*q3 + q0*q1), 1 - 2*(q1**2 + q2**2)]
+    ])
+    estimated_mag = np.dot(rot_matrix, mag)
+    north = np.cross(gravity, estimated_mag)
+    north = normalize(north)
+    v = np.cross(estimated_mag, north)
+    s = np.sqrt((1 + np.dot(estimated_mag, north)) * 2)
+    correction_quaternion = np.hstack((s / 2, v / s))
+    correction_quaternion = normalize(correction_quaternion)
+    corrected_quaternion = quaternion_multiply(correction_quaternion, quaternion)
+    return normalize(corrected_quaternion)
+
+def quaternion_multiply(q1, q2):
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return np.array([
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2
+    ])
+
+def complementary_filter(gyro_q, accel_q, mag_q, alpha, beta):
+    return normalize(alpha * gyro_q + beta * accel_q + (1 - alpha - beta) * mag_q)
+
+# Initialize alpha and beta for complementary filter (adjustable)
+alpha = 0.9  # Weight for gyroscope
+beta = 0.05  # Weight for accelerometer (gravity alignment)
+
+# Simulate real-time frame-by-frame processing
+for i in range(len(gyro_data)):
+    gyr = gyro_data[i]
+    acc_raw = accel_with_gravity[i]
+    mag_raw = mag_data[i]
+    
+    # Apply the low-pass filter to the accelerometer and magnetometer data
+    if i > 0:
+        acc_raw = np.vstack((accel_with_gravity[max(0, i-49):i+1], acc_raw))
+        mag_raw = np.vstack((mag_data[max(0, i-49):i+1], mag_raw))
+        acc = signal.filtfilt(b, a, acc_raw, axis=0)[-1]
+        mag = signal.filtfilt(b, a, mag_raw, axis=0)[-1]
+    else:
+        acc = signal.filtfilt(b, a, acc_raw.reshape(-1, 3), axis=0).flatten()
+        mag = signal.filtfilt(b, a, mag_raw.reshape(-1, 3), axis=0).flatten()
+
+    acc = normalize(acc)  # Use filtered accelerometer data with gravity
+    mag = normalize(mag)  # Normalize the magnetometer data
+    
+    # Estimate gyroscope bias when stationary
+    if np.linalg.norm(acc - np.array([0, 0, 1])) < 0.1:  # Assuming stationary if acceleration is close to gravity
+        gyro_bias += gyr
+        gyro_bias_estimation_count += 1
+        if gyro_bias_estimation_count >= gyro_bias_threshold:
+            gyro_bias /= gyro_bias_threshold
+            gyro_bias_estimation_count = 0
+    
+    # Correct gyroscope data by removing estimated bias
+    gyr -= gyro_bias
+    
+    # Update the Madgwick filter with the new sensor data
+    madgwick.updateIMU(gyr=gyr, acc=acc)
+    
+    # Get the current orientation as a quaternion from the gyroscope
+    gyro_quaternion = madgwick.Q
+    
+    # Align the gravity vector using the accelerometer
+    gravity_aligned_quaternion = align_gravity(gyro_quaternion, acc)
+    
+    # Align the magnetic vector using the magnetometer
+    mag_aligned_quaternion = align_mag(gravity_aligned_quaternion, mag)
+    
+    # Combine the orientations using the complementary filter
+    combined_quaternion = complementary_filter(gyro_quaternion, gravity_aligned_quaternion, mag_aligned_quaternion, alpha, beta)
+    
+    # Store the corrected orientation
+    orientations[i] = combined_quaternion
+    
+    # Simulate real-time delay
+    time.sleep(1.0 / frequency)
+
+# Print the estimated orientations
+print("Estimated orientations (quaternions):")
+print(orientations)
