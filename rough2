@@ -191,8 +191,24 @@ for i in range(len(gyro_data)):
     
     # Simulate real-time delay
     time.sleep(1.0 / frequency)
+def complementary_filter(gyro_q, accel_q, mag_q, alpha, beta):
+    return normalize(alpha * gyro_q + beta * accel_q + (1 - alpha - beta) * mag_q)
 
-# Print the estimated orientations
-print("Estimated orientations (quaternions):")
-print(orientations)
-
+def align_mag(quaternion, mag):
+    mag = normalize(mag)
+    gravity = np.array([0.0, 0.0, 1.0])
+    q0, q1, q2, q3 = quaternion
+    rot_matrix = np.array([
+        [1 - 2*(q2**2 + q3**2), 2*(q1*q2 - q0*q3), 2*(q1*q3 + q0*q2)],
+        [2*(q1*q2 + q0*q3), 1 - 2*(q1**2 + q3**2), 2*(q2*q3 - q0*q1)],
+        [2*(q1*q3 - q0*q2), 2*(q2*q3 + q0*q1), 1 - 2*(q1**2 + q2**2)]
+    ])
+    estimated_mag = np.dot(rot_matrix, mag)
+    north = np.cross(gravity, estimated_mag)
+    north = normalize(north)
+    v = np.cross(estimated_mag, north)
+    s = np.sqrt((1 + np.dot(estimated_mag, north)) * 2)
+    correction_quaternion = np.hstack((s / 2, v / s))
+    correction_quaternion = normalize(correction_quaternion)
+    corrected_quaternion = quaternion_multiply(correction_quaternion, quaternion)
+    return normalize(corrected_quaternion)
