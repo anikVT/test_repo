@@ -217,53 +217,41 @@ def align_mag(quaternion, mag):
 ------------------------------------------------------
 
 import numpy as np
-from scipy.signal import butter, lfilter_zi, lfilter
+from scipy.signal import butter, lfilter
 
-# Define filter parameters
-def butter_lowpass(cutoff, fs, order=5):
+# Design a Butterworth low-pass filter
+def butter_lowpass(cutoff, fs, order=4):
     nyquist = 0.5 * fs
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     return b, a
 
-# Initialize the filter state for each axis
-def init_filter_state(b, a, n_axes):
-    return [lfilter_zi(b, a) for _ in range(n_axes)]
+# Apply the filter frame by frame for 3-axis data
+def apply_lowpass_filter(data, b, a):
+    y = lfilter(b, a, data, axis=0)
+    return y
 
-# Apply the filter to a new data point for each axis
-def update_filter(data_point, b, a, zi_list):
-    filtered_data_point = []
-    for i in range(len(data_point)):
-        filtered_value, zi_list[i] = lfilter(b, a, [data_point[i]], zi=zi_list[i])
-        filtered_data_point.append(filtered_value[0])
-    return filtered_data_point, zi_list
-
-# Example usage
+# Parameters
 fs = 200  # Sampling frequency (Hz)
-cutoff = 10  # Desired cutoff frequency (Hz)
+cutoff = 20  # Desired cutoff frequency of the filter (Hz)
+order = 4  # Filter order
 
-# Design the filter
-b, a = butter_lowpass(cutoff, fs, order=4)
+# Initialize the filter
+b, a = butter_lowpass(cutoff, fs, order)
 
-# Assume accelerometer_data is your input data array
-# Example: accelerometer_data = np.random.randn(100, 3)  # Simulated 3-axis accelerometer data
-n_samples, n_axes = accelerometer_data.shape
+# Example data: Replace this with your 3D accelerometer data
+n = 1000  # Number of frames
+accel_data = np.random.randn(n, 3)  # Replace with actual 3D acceleration data (n, 3)
+filtered_data = np.zeros((n, 3))  # Initialize the filtered data array (n, 3)
 
-# Initialize the filter state for each axis
-zi_list = init_filter_state(b, a, n_axes)
+# Process frame by frame
+for i in range(n):
+    if i < 5:  # Skip the first few frames to initialize
+        filtered_data[i] = accel_data[i]
+    else:
+        filtered_frame = apply_lowpass_filter(accel_data[i-5:i+1], b, a)
+        filtered_data[i] = filtered_frame[-1]  # Store only the latest filtered value
 
-# Initialize an array to store the filtered data
-filtered_data = np.zeros((n_samples, n_axes))
-
-# Apply the filter to each axis of the accelerometer data
-for i in range(n_samples):
-    for j in range(n_axes):
-        # Check if new data is available
-        if accelerometer_data[i, j] is not None:
-            filtered_data[i, j], zi_list = update_filter(accelerometer_data[i], b, a, zi_list)
-        else:
-            print(f"No new data available for sample {i}, axis {j}. Pausing or skipping this data point.")
-
-# Now, filtered_data contains the filtered accelerometer data
+# filtered_data now contains the smoothed 3-axis acceleration data
 
 
