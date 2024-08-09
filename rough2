@@ -226,15 +226,17 @@ def butter_lowpass(cutoff, fs, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     return b, a
 
-# Initialize the filter
-def init_filter_state(b, a):
-    zi = lfilter_zi(b, a)
-    return zi
+# Initialize the filter state for each axis
+def init_filter_state(b, a, n_axes):
+    return [lfilter_zi(b, a) for _ in range(n_axes)]
 
-# Apply the filter to a new data point
-def update_filter(data_point, b, a, zi):
-    filtered_data_point, zi = lfilter(b, a, [data_point], zi=zi)
-    return filtered_data_point[0], zi
+# Apply the filter to a new data point for each axis
+def update_filter(data_point, b, a, zi_list):
+    filtered_data_point = []
+    for i in range(len(data_point)):
+        filtered_value, zi_list[i] = lfilter(b, a, [data_point[i]], zi=zi_list[i])
+        filtered_data_point.append(filtered_value[0])
+    return filtered_data_point, zi_list
 
 # Example usage
 fs = 200  # Sampling frequency (Hz)
@@ -243,12 +245,12 @@ cutoff = 10  # Desired cutoff frequency (Hz)
 # Design the filter
 b, a = butter_lowpass(cutoff, fs, order=4)
 
-# Initialize the filter state
-zi = init_filter_state(b, a)
-
 # Assume accelerometer_data is your input data array
 # Example: accelerometer_data = np.random.randn(100, 3)  # Simulated 3-axis accelerometer data
 n_samples, n_axes = accelerometer_data.shape
+
+# Initialize the filter state for each axis
+zi_list = init_filter_state(b, a, n_axes)
 
 # Initialize an array to store the filtered data
 filtered_data = np.zeros((n_samples, n_axes))
@@ -256,7 +258,12 @@ filtered_data = np.zeros((n_samples, n_axes))
 # Apply the filter to each axis of the accelerometer data
 for i in range(n_samples):
     for j in range(n_axes):
-        filtered_data[i, j], zi = update_filter(accelerometer_data[i, j], b, a, zi)
+        # Check if new data is available
+        if accelerometer_data[i, j] is not None:
+            filtered_data[i, j], zi_list = update_filter(accelerometer_data[i], b, a, zi_list)
+        else:
+            print(f"No new data available for sample {i}, axis {j}. Pausing or skipping this data point.")
 
-# Now, filtered_data contains the real-time filtered accelerometer data
+# Now, filtered_data contains the filtered accelerometer data
+
 
