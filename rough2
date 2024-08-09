@@ -254,4 +254,77 @@ for i in range(n):
 
 # filtered_data now contains the smoothed 3-axis acceleration data
 
+-----------------------------------------------------------------------------------------
+
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+
+def quat_to_rot_matrix(q):
+    return R.from_quat(q).as_matrix()
+
+def rot_matrix_to_quat(R):
+    return R.from_matrix(R).as_quat()
+
+def find_alignment_quaternion(Q_IMU, Q_OptiTrack):
+    """
+    Find the quaternion that aligns the IMU frame to the OptiTrack frame.
+    Q_IMU and Q_OptiTrack are arrays of quaternions in the IMU and OptiTrack frames, respectively.
+    """
+    # Compute rotation matrices
+    R_IMU = np.array([quat_to_rot_matrix(q) for q in Q_IMU])
+    R_OptiTrack = np.array([quat_to_rot_matrix(q) for q in Q_OptiTrack])
+
+    # Compute the covariance matrix
+    H = np.zeros((3, 3))
+    for i in range(len(R_IMU)):
+        H += R_IMU[i].T @ R_OptiTrack[i]
+
+    # Perform Singular Value Decomposition
+    U, S, Vt = np.linalg.svd(H)
+
+    # Compute the rotation matrix
+    R_align = Vt.T @ U.T
+
+    # Convert to quaternion
+    Q_align = rot_matrix_to_quat(R_align)
+    return Q_align
+
+def transform_quaternions(Q_IMU, Q_align):
+    """
+    Transform IMU quaternions into the OptiTrack frame using the alignment quaternion.
+    """
+    # Convert alignment quaternion to rotation matrix
+    R_align = quat_to_rot_matrix(Q_align)
+
+    # Apply the transformation
+    Q_IMU_in_OptiTrack = []
+    for q in Q_IMU:
+        R_IMU = quat_to_rot_matrix(q)
+        R_transformed = R_align @ R_IMU
+        Q_IMU_in_OptiTrack.append(rot_matrix_to_quat(R_transformed))
+
+    return np.array(Q_IMU_in_OptiTrack)
+
+# Example data: IMU and corresponding OptiTrack quaternions
+Q_IMU = np.array([
+    [0.0, 0.0, 0.0, 1.0],
+    [0.7071, 0.0, 0.0, 0.7071],
+    [0.0, 0.7071, 0.0, 0.7071],
+])
+
+Q_OptiTrack = np.array([
+    [0.0, 0.0, 0.0, 1.0],
+    [0.0, 0.7071, 0.0, 0.7071],
+    [-0.7071, 0.0, 0.0, 0.7071],
+])
+
+# Find the alignment quaternion
+Q_align = find_alignment_quaternion(Q_IMU, Q_OptiTrack)
+print("Alignment Quaternion:", Q_align)
+
+# Transform IMU quaternions into the OptiTrack frame
+Q_IMU_in_OptiTrack = transform_quaternions(Q_IMU, Q_align)
+print("Transformed IMU Quaternions in OptiTrack Frame:")
+print(Q_IMU_in_OptiTrack)
+
 
