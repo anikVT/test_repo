@@ -212,3 +212,51 @@ def align_mag(quaternion, mag):
     correction_quaternion = normalize(correction_quaternion)
     corrected_quaternion = quaternion_multiply(correction_quaternion, quaternion)
     return normalize(corrected_quaternion)
+
+
+------------------------------------------------------
+
+import numpy as np
+from scipy.signal import butter, lfilter_zi, lfilter
+
+# Define filter parameters
+def butter_lowpass(cutoff, fs, order=5):
+    nyquist = 0.5 * fs
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    return b, a
+
+# Initialize the filter
+def init_filter_state(b, a):
+    zi = lfilter_zi(b, a)
+    return zi
+
+# Apply the filter to a new data point
+def update_filter(data_point, b, a, zi):
+    filtered_data_point, zi = lfilter(b, a, [data_point], zi=zi)
+    return filtered_data_point[0], zi
+
+# Example usage
+fs = 200  # Sampling frequency (Hz)
+cutoff = 10  # Desired cutoff frequency (Hz)
+
+# Design the filter
+b, a = butter_lowpass(cutoff, fs, order=4)
+
+# Initialize the filter state
+zi = init_filter_state(b, a)
+
+# Assume accelerometer_data is your input data array
+# Example: accelerometer_data = np.random.randn(100, 3)  # Simulated 3-axis accelerometer data
+n_samples, n_axes = accelerometer_data.shape
+
+# Initialize an array to store the filtered data
+filtered_data = np.zeros((n_samples, n_axes))
+
+# Apply the filter to each axis of the accelerometer data
+for i in range(n_samples):
+    for j in range(n_axes):
+        filtered_data[i, j], zi = update_filter(accelerometer_data[i, j], b, a, zi)
+
+# Now, filtered_data contains the real-time filtered accelerometer data
+
